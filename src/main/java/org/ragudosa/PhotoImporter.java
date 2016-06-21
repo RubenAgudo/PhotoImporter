@@ -145,7 +145,7 @@ public class PhotoImporter {
 		calendar.setTime(date);
 
 		String year = String.valueOf(calendar.get(Calendar.YEAR));
-		String month = String.format("%02d", calendar.get(Calendar.MONTH));
+		String month = String.format("%02d", calendar.get(Calendar.MONTH) + 1);
 		String day = String.valueOf(calendar.get(Calendar.DAY_OF_MONTH));
 
 		String newJpegName = new SimpleDateFormat("yyMMdd_hhmmss").format(date) + ".jpg";
