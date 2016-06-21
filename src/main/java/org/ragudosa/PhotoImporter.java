@@ -1,103 +1,162 @@
 package org.ragudosa;
 
-import com.drew.imaging.ImageMetadataReader;
-import com.drew.imaging.ImageProcessingException;
-import com.drew.metadata.Metadata;
-import com.drew.metadata.exif.ExifSubIFDDirectory;
-
-import org.apache.commons.cli.Options;
-import org.apache.logging.log4j.*;
+import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 
-import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
-import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import com.drew.imaging.ImageMetadataReader;
+import com.drew.imaging.ImageProcessingException;
+import com.drew.metadata.Metadata;
+import com.drew.metadata.exif.ExifSubIFDDirectory;
 
 public class PhotoImporter {
-    private static final Logger logger = LogManager.getLogger(PhotoImporter.class);
 
-    public static void main(String[] args) {
-        try {
-            new PhotoImporter().run(args);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
+	private static final Logger logger = LogManager.getLogger(PhotoImporter.class);
+	private String source;
+	private String destination;
+	private Boolean deleteSourceFolder = false;
 
-    private void run(String[] args) throws IOException {
+	public static void main(String[] args) {
 
-    	boolean result = parseParameters(args);
-    	
-        if(args.length < 3) {
-            logger.error("Usage: \n\n" +
-                    "java -jar PhotoImporter.jar sourceFolder destinationFolder deleteSourceFolder \n\n"  +
-                    "Example: \n\n" +
-                    "java -jar PhotoImporter.jar C:\\users\\yourUser\\Desktop D:\\Pictures 1");
-            return;
-        }
+		try {
+			new PhotoImporter().run(args);
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (ParseException exp) {
+			// oops, something went wrong
+			System.err.println("Parsing failed.  Reason: " + exp.getMessage());
+		}
+	}
 
-        String source = args[0];
-        String destination = args[1];
-        String deleteSource = args[2];
+	private void run(String[] args) throws IOException, ParseException {
 
-        int numberOfTotalFiles = new File(Paths.get(source).toString()).list().length;
+		Options options = createParameters(args);
 
-        Files.walk(Paths.get(source)).forEach(filePath -> {
-            if (Files.isRegularFile(filePath)) {
-                File jpegFile = filePath.toFile();
-                try {
-                    Metadata metadata = ImageMetadataReader.readMetadata(jpegFile);
+		// create the parser
+		CommandLineParser parser = new DefaultParser();
 
-                    // obtain the Exif directory
-                    ExifSubIFDDirectory directory = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
+		// parse the command line arguments
+		CommandLine line = parser.parse(options, args);
 
-                    // query the tag's value
-                    Date date = directory.getDateOriginal();
+		if (line.hasOption("help")) {
+			return;
+		}
 
-                    if(date != null) {
-                        copyFile(destination, filePath, jpegFile, date);
-                    } else {
-                        logger.warn("File " + jpegFile.getAbsolutePath() + " skipped, missing the date");
-                    }
+		this.source = line.getOptionValue("source-folder");
 
-                } catch (ImageProcessingException | IOException e) {
-                    e.printStackTrace();
-                }
+		this.destination = line.getOptionValue("destination-folder");
 
-            }
-        });
+		if (line.hasOption("deleteSourceFolder")) {
+			// initialise the member variable
+			this.deleteSourceFolder = true;
+		}
 
-    }
+		copyFiles();
 
-    private boolean parseParameters(String[] args) {
+	}
+
+	private void copyFiles() throws IOException {
+
+		Files.walk(Paths.get(this.source)).forEach(filePath -> {
+			if (Files.isRegularFile(filePath)) {
+				File jpegFile = filePath.toFile();
+				try {
+					Metadata metadata = ImageMetadataReader.readMetadata(jpegFile);
+
+					// obtain the Exif directory
+					ExifSubIFDDirectory directory = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
+
+					// query the tag's value
+					Date date = directory.getDateOriginal();
+
+					if (date != null) {
+						copyFile(this.destination, filePath, jpegFile, date);
+
+						if (this.deleteSourceFolder) {
+							deleteFile(jpegFile);
+						}
+
+					} else {
+						logger.error("File " + jpegFile.getAbsolutePath() + " skipped, missing original date");
+					}
+
+				} catch (ImageProcessingException | IOException e) {
+					e.printStackTrace();
+				}
+
+			}
+		});
+	}
+
+	private void deleteFile(File fileToDelete) throws IOException {
+		if (!fileToDelete.isDirectory()) {
+			Files.delete(fileToDelete.toPath());
+			logger.info("Deleted " + fileToDelete.getAbsolutePath());
+		}
+	}
+
+	private Options createParameters(String[] args) {
+		Option help = new Option("help", "print this message");
+		Option version = new Option("version", "print the version information and exit");
+		Option deleteSourceFolder = new Option("deleteSourceFolder", "Deletes the source files");
+
+		Option source = Option.builder("s").argName("folder").hasArg().desc("Source folder to process")
+				.longOpt("source-folder").required().build();
+
+		Option destination = Option.builder("d").argName("folder").hasArg()
+				.desc("Where to copy the pictures specified in source").longOpt("destination-folder").required()
+				.build();
+
 		Options options = new Options();
-		options.addOption("s", true, "Source folder from where to copy the photos");
-		options.addOption("t", true, "Folder where to copy the photos");
-		return false;
+
+		options.addOption(help);
+		options.addOption(version);
+		options.addOption(source);
+		options.addOption(destination);
+		options.addOption(deleteSourceFolder);
+
+		HelpFormatter formatter = new HelpFormatter();
+		formatter.printHelp("photoimporter", options);
+
+		return options;
 	}
 
 	private void copyFile(String destination, Path filePath, File jpegFile, Date date) throws IOException {
 
-        Calendar calendar = Calendar.getInstance();
-        calendar.setTime(date);
+		Calendar calendar = Calendar.getInstance();
+		calendar.setTime(date);
 
-        String year = String.valueOf(calendar.get(Calendar.YEAR));
-        String month = String.valueOf(calendar.get(Calendar.MONTH));
-        String day = String.valueOf(calendar.get(Calendar.DAY_OF_MONTH));
+		String year = String.valueOf(calendar.get(Calendar.YEAR));
+		String month = String.format("%02d", calendar.get(Calendar.MONTH));
+		String day = String.valueOf(calendar.get(Calendar.DAY_OF_MONTH));
 
-        Path path = Paths.get(destination, year, month, day);
-        File destinationFolder = new File(path.toString());
-        destinationFolder.mkdirs();
+		String newJpegName = new SimpleDateFormat("yyMMdd_hhmmss").format(date) + ".jpg";
 
-        path = Paths.get(destination, year, month, day, jpegFile.getName());
+		Path destinationPath = Paths.get(destination, year, month, day);
+		File destinationFolder = new File(destinationPath.toString());
+		destinationFolder.mkdirs();
 
-        Files.copy(filePath, path, REPLACE_EXISTING, COPY_ATTRIBUTES);
-        logger.info("Moved " + filePath.toString() + " -> " + path.toString());
-    }
+		destinationPath = Paths.get(destination, year, month, day, newJpegName);
+
+		Files.copy(filePath, destinationPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
+		logger.info(filePath.toString() + " -> " + destinationPath.toString());
+	}
 }
