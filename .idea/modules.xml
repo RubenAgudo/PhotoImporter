@@ -2,9 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/photo-importer.iml" filepath="$PROJECT_DIR$/.idea/modules/photo-importer.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/photo-importer_main.iml" filepath="$PROJECT_DIR$/.idea/modules/photo-importer_main.iml" group="photo-importer" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/photo-importer_test.iml" filepath="$PROJECT_DIR$/.idea/modules/photo-importer_test.iml" group="photo-importer" />
+      <module fileurl="file://$PROJECT_DIR$/src/main/main.iml" filepath="$PROJECT_DIR$/src/main/main.iml" />
     </modules>
   </component>
 </project>
