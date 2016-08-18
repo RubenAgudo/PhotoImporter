@@ -117,7 +117,7 @@ public class PhotoImporter {
 
     private void deleteFile(File fileToDelete) throws IOException {
         if (!fileToDelete.isDirectory()) {
-            Files.delete(fileToDelete.toPath());
+            fileToDelete.delete();
             logger.info("Deleted " + fileToDelete.getAbsolutePath());
         }
     }
@@ -155,7 +155,7 @@ public class PhotoImporter {
 
         String year = String.valueOf(calendar.get(Calendar.YEAR));
         String month = String.format("%02d", calendar.get(Calendar.MONTH) + 1);
-        String day = String.valueOf(calendar.get(Calendar.DAY_OF_MONTH));
+        String day = String.format("%02d", calendar.get(Calendar.DAY_OF_MONTH));
 
         String newJpegName = new SimpleDateFormat("yyMMdd_hhmmss").format(date) + ".jpg";
 
