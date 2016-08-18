@@ -91,7 +91,7 @@ public class PhotoImporter {
             // obtain the Exif directory
             ExifSubIFDDirectory directory = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
 
-            if(directory == null) {
+            if (directory == null) {
                 logger.warn("File " + jpegFile.getAbsolutePath() + " skipped, no EXIF metadata found");
                 return;
             }
@@ -119,6 +119,11 @@ public class PhotoImporter {
         if (!fileToDelete.isDirectory()) {
             fileToDelete.delete();
             logger.info("Deleted " + fileToDelete.getAbsolutePath());
+        } else {
+            if (fileToDelete.list().length == 0) {
+                logger.info("Deleted folder: " + fileToDelete.getAbsolutePath());
+                fileToDelete.delete();
+            }
         }
     }
 
