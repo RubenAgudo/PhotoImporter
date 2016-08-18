@@ -18,5 +18,9 @@
         <processorPath useClasspath="true" />
       </profile>
     </annotationProcessing>
+    <bytecodeTargetLevel>
+      <module name="photo-importer_main" target="1.8" />
+      <module name="photo-importer_test" target="1.8" />
+    </bytecodeTargetLevel>
   </component>
 </project>
