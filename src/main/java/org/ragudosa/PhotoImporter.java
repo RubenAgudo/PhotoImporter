@@ -6,6 +6,7 @@ import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
@@ -32,7 +33,6 @@ public class PhotoImporter {
     private static final Logger logger = LogManager.getLogger(PhotoImporter.class);
     private String source;
     private String destination;
-    private Boolean deleteSourceFolder = false;
 
     public static void main(String[] args) {
 
@@ -40,78 +40,92 @@ public class PhotoImporter {
             new PhotoImporter().run(args);
         } catch (IOException e) {
             e.printStackTrace();
-        } catch (ParseException exp) {
-            // oops, something went wrong
-            System.err.println("Parsing failed.  Reason: " + exp.getMessage());
         }
     }
 
-    private void run(String[] args) throws IOException, ParseException {
+    private void run(String[] args) throws IOException {
 
-        Options options = createParameters(args);
+        Options options = createParameters();
 
         // create the parser
         CommandLineParser parser = new DefaultParser();
 
-        // parse the command line arguments
-        CommandLine line = parser.parse(options, args);
+        try {
+            // parse the command line arguments
+            CommandLine line = parser.parse(options, args);
 
-        if (line.hasOption("help")) {
-            return;
+            if (line.hasOption("help")) {
+                HelpFormatter formatter = new HelpFormatter();
+                formatter.printHelp("photoimporter", options);
+            }
+
+            this.source = line.getOptionValue("source-folder");
+
+            this.destination = line.getOptionValue("destination-folder");
+            boolean deleteSourceFolder = line.hasOption("deleteSourceFolder");
+            copyFiles(deleteSourceFolder);
+            deleteEmptyFolders(deleteSourceFolder);
+
+        } catch (ParseException exp) {
+            HelpFormatter formatter = new HelpFormatter();
+            formatter.printHelp("photoimporter", options);
         }
-
-        this.source = line.getOptionValue("source-folder");
-
-        this.destination = line.getOptionValue("destination-folder");
-
-        if (line.hasOption("deleteSourceFolder")) {
-            // initialise the member variable
-            this.deleteSourceFolder = true;
-        }
-
-        copyFiles();
 
     }
 
-    private void copyFiles() throws IOException {
-
+    private void deleteEmptyFolders(Boolean deleteFolders) throws IOException {
         Files.walk(Paths.get(this.source)).forEach(filePath -> {
-            if (Files.isRegularFile(filePath)) {
-                File jpegFile = filePath.toFile();
-                processFile(filePath, jpegFile);
+            if (Files.isDirectory(filePath, LinkOption.NOFOLLOW_LINKS)) {
 
+                File directory = filePath.toFile();
+                if (deleteFolders) {
+                    if (directory.list().length == 0) {
+                        directory.delete();
+                    }
+                }
             }
         });
     }
 
-    private void processFile(Path filePath, File jpegFile) {
-        try {
-            Metadata metadata = ImageMetadataReader.readMetadata(jpegFile);
+    private void copyFiles(Boolean deleteSourceFolder) throws IOException {
 
-            // obtain the Exif directory
-            ExifSubIFDDirectory directory = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
+        Files.walk(Paths.get(this.source)).forEach(filePath -> {
+            if (Files.isRegularFile(filePath)) {
+                try {
+                    File jpegFile = filePath.toFile();
+                    processFile(filePath, jpegFile);
 
-            if (directory == null) {
-                logger.warn("File " + jpegFile.getAbsolutePath() + " skipped, no EXIF metadata found");
-                return;
-            }
+                    if (deleteSourceFolder) {
+                        deleteFile(jpegFile);
+                    }
 
-            // query the tag's value
-            Date date = directory.getDateOriginal();
-
-            if (date != null) {
-                copyFile(this.destination, filePath, jpegFile, date);
-
-                if (this.deleteSourceFolder) {
-                    deleteFile(jpegFile);
+                } catch (ImageProcessingException | IOException e) {
+                    e.printStackTrace();
                 }
-
-            } else {
-                logger.warn("File " + jpegFile.getAbsolutePath() + " skipped, missing original date");
             }
+        });
+    }
 
-        } catch (ImageProcessingException | IOException e) {
-            e.printStackTrace();
+    private void processFile(Path filePath, File jpegFile) throws ImageProcessingException, IOException {
+
+        Metadata metadata = ImageMetadataReader.readMetadata(jpegFile);
+
+        // obtain the Exif directory
+        ExifSubIFDDirectory directory = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
+
+        if (directory == null) {
+            logger.warn("File " + jpegFile.getAbsolutePath() + " skipped, no EXIF metadata found");
+            return;
+        }
+
+        // query the tag's value
+        Date date = directory.getDateOriginal();
+
+        if (date != null) {
+            copyFile(this.destination, filePath, jpegFile, date);
+
+        } else {
+            logger.warn("File " + jpegFile.getAbsolutePath() + " skipped, missing original date");
         }
     }
 
@@ -119,15 +133,10 @@ public class PhotoImporter {
         if (!fileToDelete.isDirectory()) {
             fileToDelete.delete();
             logger.info("Deleted " + fileToDelete.getAbsolutePath());
-        } else {
-            if (fileToDelete.list().length == 0) {
-                logger.info("Deleted folder: " + fileToDelete.getAbsolutePath());
-                fileToDelete.delete();
-            }
         }
     }
 
-    private Options createParameters(String[] args) {
+    private Options createParameters() {
         Option help = new Option("help", "print this message");
         Option version = new Option("version", "print the version information and exit");
         Option deleteSourceFolder = new Option("deleteSourceFolder", "Deletes the source files");
@@ -146,9 +155,6 @@ public class PhotoImporter {
         options.addOption(source);
         options.addOption(destination);
         options.addOption(deleteSourceFolder);
-
-        HelpFormatter formatter = new HelpFormatter();
-        formatter.printHelp("photoimporter", options);
 
         return options;
     }
